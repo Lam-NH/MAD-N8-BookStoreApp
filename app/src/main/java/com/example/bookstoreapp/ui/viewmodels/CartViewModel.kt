@@ -1,0 +1,88 @@
+package com.example.bookstoreapp.ui.viewmodels
+
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.bookstoreapp.data.api.RetrofitClient
+import com.example.bookstoreapp.data.api.TokenManager
+import com.example.bookstoreapp.data.model.*
+import kotlinx.coroutines.launch
+
+class CartViewModel : ViewModel() {
+    private val api = RetrofitClient.api
+
+    var cartItems = mutableStateListOf<CartItemResponse>()
+    var cartId by mutableStateOf(-1)
+    var totalAmount by mutableStateOf(0.0)
+    var isLoading by mutableStateOf(false)
+
+    // Local selection state (not synced to backend)
+    private val selectedIds = mutableStateListOf<Int>()
+
+    fun loadCart() {
+        if (TokenManager.customerId <= 0) return
+        viewModelScope.launch {
+            isLoading = true
+            try {
+                val response = api.getCart(TokenManager.customerId)
+                if (response.isSuccessful && response.body() != null) {
+                    val body = response.body()!!
+                    cartId = body.cartId
+                    cartItems.clear()
+                    cartItems.addAll(body.items)
+                    totalAmount = body.totalAmount
+                }
+            } catch (_: Exception) {}
+            isLoading = false
+        }
+    }
+
+    fun addToCart(bookId: Int, quantity: Int = 1) {
+        viewModelScope.launch {
+            try {
+                api.addToCart(AddToCartRequest(TokenManager.customerId, bookId, quantity))
+                loadCart()
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun updateQuantity(cartItemId: Int, newQuantity: Int) {
+        if (newQuantity <= 0) {
+            deleteItem(cartItemId)
+            return
+        }
+        viewModelScope.launch {
+            try {
+                api.updateCartItem(cartItemId, UpdateQuantityRequest(newQuantity))
+                loadCart()
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun deleteItem(cartItemId: Int) {
+        viewModelScope.launch {
+            try {
+                api.deleteCartItem(cartItemId)
+                selectedIds.remove(cartItemId)
+                loadCart()
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun toggleSelection(cartItemId: Int, isSelected: Boolean) {
+        if (isSelected) { if (!selectedIds.contains(cartItemId)) selectedIds.add(cartItemId) }
+        else selectedIds.remove(cartItemId)
+    }
+
+    fun isSelected(cartItemId: Int): Boolean = selectedIds.contains(cartItemId)
+
+    val selectedTotalPrice: Double
+        get() = cartItems.filter { selectedIds.contains(it.cartItemId) }
+            .sumOf { (it.bookPrice ?: 0.0) * it.quantity }
+
+    val hasSelectedItems: Boolean
+        get() = selectedIds.any { id -> cartItems.any { it.cartItemId == id } }
+}

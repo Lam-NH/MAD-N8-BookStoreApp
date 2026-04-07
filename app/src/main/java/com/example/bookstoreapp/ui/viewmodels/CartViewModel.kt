@@ -50,10 +50,7 @@ class CartViewModel : ViewModel() {
     }
 
     fun updateQuantity(cartItemId: Int, newQuantity: Int) {
-        if (newQuantity <= 0) {
-            deleteItem(cartItemId)
-            return
-        }
+        if (newQuantity < 1) return
         viewModelScope.launch {
             try {
                 api.updateCartItem(cartItemId, UpdateQuantityRequest(newQuantity))

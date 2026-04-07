@@ -53,10 +53,8 @@ interface BookStoreApiService {
 
     @GET("/api/books")
     suspend fun getBooks(
-        @Query("page") page: Int = 1,
-        @Query("limit") limit: Int = 20,
         @Query("categoryId") categoryId: Int? = null
-    ): Response<PaginatedBooks>
+    ): Response<List<Book>>
 
     @GET("/api/books/for-you")
     suspend fun getBooksForYou(): Response<List<Book>>
@@ -66,9 +64,8 @@ interface BookStoreApiService {
 
     @GET("/api/books/search")
     suspend fun searchBooks(
-        @Query("q") query: String,
-        @Query("page") page: Int = 1
-    ): Response<PaginatedBooks>
+        @Query("q") query: String
+    ): Response<com.google.gson.JsonElement>
 
     @GET("/api/books/author/{id}")
     suspend fun getAuthor(@Path("id") authorId: Int): Response<Any>
@@ -89,6 +86,14 @@ interface BookStoreApiService {
     // ---- AI (16) ----
     @POST("/api/ai/chatbot")
     suspend fun chatbot(@Body request: ChatbotRequest): Response<ChatbotResponse>
+
+    @Multipart
+    @POST("/api/ai/image-search")
+    suspend fun imageSearch(@Part image: okhttp3.MultipartBody.Part): Response<AISearchResponse>
+
+    @Multipart
+    @POST("/api/ai/voice-search")
+    suspend fun voiceSearch(@Part audio: okhttp3.MultipartBody.Part): Response<AISearchResponse>
 
     // ---- CART (17-20) ----
     @GET("/api/cart")
@@ -169,7 +174,7 @@ interface BookStoreApiService {
 
 // ===== Retrofit Client Singleton =====
 object RetrofitClient {
-    private val BASE_URL = if (android.os.Build.FINGERPRINT.contains("generic") || android.os.Build.MODEL.contains("Emulator") || android.os.Build.PRODUCT.contains("sdk")) {
+    val BASE_URL = if (android.os.Build.FINGERPRINT.contains("generic") || android.os.Build.MODEL.contains("Emulator") || android.os.Build.PRODUCT.contains("sdk")) {
         "http://10.0.2.2:3000" // IP dành cho Android Emulator
     } else {
         "http://127.0.0.1:3000" // IP dành cho thiết bị thật (yêu cầu adb reverse)

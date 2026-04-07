@@ -48,14 +48,14 @@ fun CartScreen(navController: NavController, cartViewModel: CartViewModel = view
                         Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(checked = cartViewModel.isSelected(item.cartItemId), onCheckedChange = { cartViewModel.toggleSelection(item.cartItemId, it) })
                             if (!item.bookImage.isNullOrEmpty()) {
-                                AsyncImage(model = item.bookImage, contentDescription = null, modifier = Modifier.size(60.dp), contentScale = ContentScale.Crop)
+                                AsyncImage(model = item.fullImageUrl, contentDescription = null, modifier = Modifier.size(60.dp), contentScale = ContentScale.Crop)
                                 Spacer(modifier = Modifier.width(8.dp))
                             }
                             Column(modifier = Modifier.weight(1f).padding(horizontal = 8.dp)) {
-                                Text(item.bookTitle ?: "Sách", style = MaterialTheme.typography.titleMedium, maxLines = 2)
-                                Text(format.format(item.bookPrice ?: 0.0), color = MaterialTheme.colorScheme.primary)
+                                Text(item.bookTitle, style = MaterialTheme.typography.titleMedium, maxLines = 2)
+                                Text(format.format(item.bookPrice * 100000), color = MaterialTheme.colorScheme.primary)
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                                    OutlinedButton(onClick = { cartViewModel.updateQuantity(item.cartItemId, item.quantity - 1) }, modifier = Modifier.size(28.dp), contentPadding = PaddingValues(0.dp)) { Text("-") }
+                                    OutlinedButton(onClick = { if (item.quantity > 1) cartViewModel.updateQuantity(item.cartItemId, item.quantity - 1) }, enabled = item.quantity > 1, modifier = Modifier.size(28.dp), contentPadding = PaddingValues(0.dp)) { Text("-") }
                                     Text(item.quantity.toString(), modifier = Modifier.padding(horizontal = 12.dp))
                                     OutlinedButton(onClick = { cartViewModel.updateQuantity(item.cartItemId, item.quantity + 1) }, modifier = Modifier.size(28.dp), contentPadding = PaddingValues(0.dp)) { Text("+") }
                                 }
@@ -72,7 +72,7 @@ fun CartScreen(navController: NavController, cartViewModel: CartViewModel = view
         if (cartViewModel.hasSelectedItems) {
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Tổng: ${format.format(cartViewModel.selectedTotalPrice)}", style = MaterialTheme.typography.titleLarge)
+                Text("Tổng: ${format.format(cartViewModel.selectedTotalPrice * 100000)}", style = MaterialTheme.typography.titleLarge)
                 Button(onClick = { navController.navigate(Screen.Checkout.route) }) { Text("Thanh toán") }
             }
         }
@@ -80,16 +80,16 @@ fun CartScreen(navController: NavController, cartViewModel: CartViewModel = view
 }
 
 @Composable
-fun CheckoutScreen(navController: NavController, orderViewModel: OrderViewModel = viewModel()) {
+fun CheckoutScreen(navController: NavController, orderViewModel: OrderViewModel = viewModel(), cartViewModel: CartViewModel = viewModel()) {
     LaunchedEffect(Unit) { orderViewModel.loadShipments() }
 
     Column(modifier = Modifier.fillMaxSize()) {
         MainTopAppBar("Thanh toán", navController)
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(16.dp).weight(1f)) {
             Spacer(modifier = Modifier.height(8.dp))
 
             // Địa chỉ giao hàng
-            Card(modifier = Modifier.fillMaxWidth().clickable { navController.navigate(Screen.AddressMap.route) }) {
+            Card(modifier = Modifier.fillMaxWidth().clickable { navController.navigate("address_selection") }) {
                 Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Địa chỉ giao hàng", fontWeight = FontWeight.Bold)
@@ -101,7 +101,7 @@ fun CheckoutScreen(navController: NavController, orderViewModel: OrderViewModel 
 
             Spacer(modifier = Modifier.height(16.dp))
             // Phương thức thanh toán
-            Card(modifier = Modifier.fillMaxWidth().clickable { navController.navigate(Screen.PaymentMethod.route) }) {
+            Card(modifier = Modifier.fillMaxWidth().clickable { navController.navigate("payment_selection") }) {
                 Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Phương thức thanh toán", fontWeight = FontWeight.Bold)
@@ -125,7 +125,9 @@ fun CheckoutScreen(navController: NavController, orderViewModel: OrderViewModel 
 
             Spacer(modifier = Modifier.height(16.dp))
             // Voucher
-            Card(modifier = Modifier.fillMaxWidth().clickable { navController.navigate(Screen.VoucherSelection.route) }) {
+            Card(modifier = Modifier.fillMaxWidth().clickable {
+                navController.navigate("voucher_selection/${cartViewModel.selectedTotalPrice}")
+            }) {
                 Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Khuyến mãi / Voucher", fontWeight = FontWeight.Bold)
@@ -134,8 +136,11 @@ fun CheckoutScreen(navController: NavController, orderViewModel: OrderViewModel 
                     Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = Color.Gray)
                 }
             }
+        }
 
-            Spacer(modifier = Modifier.weight(1f))
+        // Bottom checkout button
+        Surface(shadowElevation = 8.dp) {
+            val finalPrice = cartViewModel.selectedTotalPrice // Can subtract voucher discount here if needed
             Button(
                 onClick = {
                     orderViewModel.checkout(
@@ -143,16 +148,91 @@ fun CheckoutScreen(navController: NavController, orderViewModel: OrderViewModel 
                         paymentId = orderViewModel.selectedPayment?.paymentId ?: 0,
                         shipmentId = orderViewModel.selectedShipment?.shipmentId ?: 0,
                         voucherId = orderViewModel.selectedVoucher?.voucherId,
-                        onSuccess = { navController.navigate(Screen.OrderHistory.route) { popUpTo(Screen.Home.route) } }
+                        onSuccess = { 
+                            cartViewModel.loadCart() // Clear or refresh local cart
+                            navController.navigate(Screen.OrderHistory.route) { popUpTo(Screen.Home.route) { inclusive = true } } 
+                        }
                     )
                 },
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-                enabled = !orderViewModel.isLoading
+                modifier = Modifier.fillMaxWidth().padding(16.dp).height(50.dp),
+                enabled = !orderViewModel.isLoading && orderViewModel.selectedAddress != null && orderViewModel.selectedPayment != null && orderViewModel.selectedShipment != null
             ) {
                 if (orderViewModel.isLoading) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
-                else Text("Xác nhận Đặt hàng")
+                else {
+                    Text("Xác nhận Đặt hàng")
+                }
             }
-            Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+fun AddressSelectionScreen(navController: NavController, orderViewModel: OrderViewModel = viewModel(), profileViewModel: com.example.bookstoreapp.ui.viewmodels.ProfileViewModel = viewModel()) {
+    LaunchedEffect(Unit) { profileViewModel.loadAddresses() }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        MainTopAppBar("Chọn địa chỉ giao hàng", navController)
+        Column(modifier = Modifier.padding(16.dp).weight(1f)) {
+            if (profileViewModel.addresses.isEmpty()) {
+                Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                    Text("Chưa có địa chỉ nào", color = Color.Gray)
+                }
+            } else {
+                profileViewModel.addresses.forEach { addr ->
+                    Card(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), onClick = {
+                        orderViewModel.selectedAddress = addr
+                        navController.popBackStack()
+                    }) {
+                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(addr.receiverName, fontWeight = FontWeight.Bold)
+                                Text(addr.addressString, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                            }
+                            RadioButton(
+                                selected = orderViewModel.selectedAddress?.addressId == addr.addressId,
+                                onClick = { orderViewModel.selectedAddress = addr; navController.popBackStack() }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Button(onClick = { navController.navigate(Screen.AddAddress.route) }, modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            Text("+ Thêm địa chỉ mới")
+        }
+    }
+}
+
+@Composable
+fun PaymentSelectionScreen(navController: NavController, orderViewModel: OrderViewModel = viewModel(), profileViewModel: com.example.bookstoreapp.ui.viewmodels.ProfileViewModel = viewModel()) {
+    LaunchedEffect(Unit) { profileViewModel.loadPayments() }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        MainTopAppBar("Chọn phương thức thanh toán", navController)
+        Column(modifier = Modifier.padding(16.dp).weight(1f)) {
+            if (profileViewModel.payments.isEmpty()) {
+                Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                    Text("Chưa có phương thức nào", color = Color.Gray)
+                }
+            } else {
+                profileViewModel.payments.forEach { payment ->
+                    Card(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), onClick = {
+                        orderViewModel.selectedPayment = payment
+                        navController.popBackStack()
+                    }) {
+                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(payment.paymentMethod, modifier = Modifier.weight(1f))
+                            RadioButton(
+                                selected = orderViewModel.selectedPayment?.paymentId == payment.paymentId,
+                                onClick = { orderViewModel.selectedPayment = payment; navController.popBackStack() }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Button(onClick = { navController.navigate(Screen.AddPaymentMethod.route) }, modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            Text("+ Thêm phương thức mới")
         }
     }
 }

@@ -56,15 +56,17 @@ fun AppNavigation(
         // Product List with optional categoryId
         composable(Screen.ProductList.route) { ProductListScreen(navController, bookViewModel = bookViewModel) }
         composable(
-            "product_list?categoryId={categoryId}&title={title}",
+            "product_list?categoryId={categoryId}&authorId={authorId}&title={title}",
             arguments = listOf(
                 navArgument("categoryId") { type = NavType.IntType; defaultValue = -1 },
+                navArgument("authorId") { type = NavType.IntType; defaultValue = -1 },
                 navArgument("title") { type = NavType.StringType; defaultValue = "Tất cả sản phẩm" }
             )
         ) { backStackEntry ->
             val catId = backStackEntry.arguments?.getInt("categoryId")?.let { if (it == -1) null else it }
+            val authId = backStackEntry.arguments?.getInt("authorId")?.let { if (it == -1) null else it }
             val title = backStackEntry.arguments?.getString("title") ?: "Tất cả sản phẩm"
-            ProductListScreen(navController, categoryId = catId, title = title, bookViewModel = bookViewModel)
+            ProductListScreen(navController, categoryId = catId, authorId = authId, title = title, bookViewModel = bookViewModel)
         }
 
         // Product Detail with bookId
@@ -78,6 +80,15 @@ fun AppNavigation(
 
         composable(Screen.CategoryList.route) { CategoryListScreen(navController, bookViewModel) }
         composable(Screen.Search.route) { SearchScreen(navController, bookViewModel) }
+        composable("image_search") { ImageSearchScreen(navController, bookViewModel) }
+        composable("author_list") { AuthorListScreen(navController, bookViewModel) }
+        composable(
+            "author_books/{authorId}",
+            arguments = listOf(navArgument("authorId") { type = NavType.IntType })
+        ) { backStackEntry ->
+            val authorId = backStackEntry.arguments?.getInt("authorId") ?: 0
+            AuthorBooksScreen(navController, authorId, bookViewModel)
+        }
 
         // Review List with bookId
         composable(
@@ -101,7 +112,15 @@ fun AppNavigation(
             OrderDetailScreen(navController, orderId, orderViewModel)
         }
 
-        composable(Screen.VoucherSelection.route) { VoucherSelectionScreen(navController, orderViewModel) }
+        composable(
+            "voucher_selection/{totalAmount}",
+            arguments = listOf(navArgument("totalAmount") { type = NavType.FloatType })
+        ) { backStackEntry ->
+            val totalAmount = backStackEntry.arguments?.getFloat("totalAmount")?.toDouble() ?: 0.0
+            VoucherSelectionScreen(navController, totalAmount, orderViewModel)
+        }
         composable(Screen.ShipmentSelection.route) { ShipmentSelectionScreen(navController, orderViewModel) }
+        composable("address_selection") { AddressSelectionScreen(navController, orderViewModel, profileViewModel) }
+        composable("payment_selection") { PaymentSelectionScreen(navController, orderViewModel, profileViewModel) }
     }
 }

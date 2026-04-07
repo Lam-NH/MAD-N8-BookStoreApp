@@ -60,15 +60,20 @@ fun HomeScreen(navController: NavController, bookViewModel: BookViewModel = view
             modifier = Modifier.weight(1f)
         ) {
             items(bookViewModel.forYouBooks) { book ->
-                Card(modifier = Modifier.fillMaxWidth().clickable { navController.navigate("product_detail/${book.bookId}") }) {
-                    Column(modifier = Modifier.padding(8.dp)) {
+                Card(modifier = Modifier.fillMaxWidth().height(260.dp).clickable { navController.navigate("product_detail/${book.bookId}") }) {
+                    Column(modifier = Modifier.padding(8.dp).fillMaxSize()) {
                         if (book.primaryImageUrl.isNotEmpty()) {
-                            AsyncImage(model = book.primaryImageUrl, contentDescription = book.title, modifier = Modifier.height(120.dp).fillMaxWidth().clip(RoundedCornerShape(4.dp)), contentScale = ContentScale.Crop)
+                            AsyncImage(model = book.primaryImageUrl, contentDescription = book.title, modifier = Modifier.height(120.dp).fillMaxWidth().clip(RoundedCornerShape(4.dp)), contentScale = ContentScale.Fit)
                         } else {
                             Box(modifier = Modifier.height(120.dp).fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant))
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(book.title, style = MaterialTheme.typography.titleMedium, maxLines = 2)
+                        if (!book.author.isNullOrEmpty()) {
+                            Text(book.author, color = androidx.compose.ui.graphics.Color.Gray, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                        }
+                        Spacer(modifier = Modifier.weight(1f))
+                        Spacer(modifier = Modifier.weight(1f))
                         Text("${"%,.0f".format(book.price)}đ", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyLarge)
                     }
                 }

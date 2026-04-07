@@ -1,9 +1,12 @@
 package com.example.bookstoreapp.ui.screens.orders
 
 import android.widget.Toast
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,11 +26,12 @@ import java.util.Locale
 
 @Composable
 fun OrderHistoryScreen(navController: NavController, orderViewModel: OrderViewModel = viewModel()) {
-    var selectedTab by remember { mutableStateOf(0) }
     val tabs = listOf("Tất cả", "Chờ thanh toán", "Đang xử lý", "Đang giao", "Hoàn tất", "Đã hủy")
+    val pagerState = rememberPagerState(pageCount = { tabs.size })
+    val coroutineScope = rememberCoroutineScope()
     val format = NumberFormat.getCurrencyInstance(Locale("vi", "VN"))
 
-    val statusQuery = when (selectedTab) {
+    val statusQuery = when (pagerState.currentPage) {
         0 -> null
         1 -> "Chờ thanh toán"
         2 -> "Đang xử lý"
@@ -37,36 +41,41 @@ fun OrderHistoryScreen(navController: NavController, orderViewModel: OrderViewMo
         else -> null
     }
 
-    LaunchedEffect(selectedTab) { orderViewModel.loadOrders(statusQuery) }
+    LaunchedEffect(pagerState.currentPage) { orderViewModel.loadOrders(statusQuery) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         MainTopAppBar("Lịch sử đơn hàng", navController)
 
-        ScrollableTabRow(selectedTabIndex = selectedTab) {
+        ScrollableTabRow(selectedTabIndex = pagerState.currentPage) {
             tabs.forEachIndexed { index, title ->
-                Tab(selected = selectedTab == index, onClick = { selectedTab = index }, text = { Text(title) })
+                Tab(selected = pagerState.currentPage == index, onClick = { 
+                    coroutineScope.launch { pagerState.animateScrollToPage(index) } 
+                }, text = { Text(title) })
             }
         }
 
-        if (orderViewModel.isLoading) {
-            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        } else if (orderViewModel.orders.isEmpty()) {
-            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Text("Chưa có đơn hàng nào", color = Color.Gray) }
-        } else {
-            LazyColumn(modifier = Modifier.weight(1f).padding(8.dp)) {
-                items(orderViewModel.orders) { order ->
-                    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), onClick = { navController.navigate("order_detail/${order.orderId}") }) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Đơn hàng #${order.orderId}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                Text(order.status ?: "", color = when(order.status) {
-                                    "Hoàn tất" -> Color(0xFF2E7D32)
-                                    "Đã hủy" -> Color.Red
-                                    else -> MaterialTheme.colorScheme.primary
-                                })
+        HorizontalPager(state = pagerState, modifier = Modifier.weight(1f)) { page ->
+            if (orderViewModel.isLoading) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            } else if (orderViewModel.orders.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Chưa có đơn hàng nào", color = Color.Gray) }
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize().padding(8.dp)) {
+                    items(orderViewModel.orders) { order ->
+                        Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), onClick = { navController.navigate("order_detail/${order.orderId}") }) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Đơn hàng #${order.orderId}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    Text(order.status ?: "", color = when(order.status) {
+                                        "Hoàn tất" -> Color(0xFF2E7D32)
+                                        "Đã hủy" -> Color.Red
+                                        else -> MaterialTheme.colorScheme.primary
+                                    })
+                                }
+                                if (order.orderDate != null) Text("Ngày: ${order.orderDate}", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                                val orderTotal = (order.finalAmount ?: order.totalAmount ?: 0.0) * 100000
+                                Text("Tổng: ${format.format(orderTotal)}", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
                             }
-                            if (order.orderDate != null) Text("Ngày: ${order.orderDate}", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
-                            Text("Tổng: ${format.format(order.finalAmount ?: order.totalAmount ?: 0.0)}", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
                         }
                     }
                 }
@@ -108,21 +117,24 @@ fun OrderDetailScreen(navController: NavController, orderId: Int, orderViewModel
                 detail.items?.forEach { item ->
                     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (!item.bookImage.isNullOrEmpty()) {
-                            AsyncImage(model = item.bookImage, contentDescription = null, modifier = Modifier.size(50.dp), contentScale = ContentScale.Crop)
+                            AsyncImage(model = item.fullImageUrl, contentDescription = null, modifier = Modifier.size(50.dp), contentScale = ContentScale.Crop)
                             Spacer(modifier = Modifier.width(8.dp))
                         }
                         Column(modifier = Modifier.weight(1f)) {
                             Text(item.bookTitle ?: "Sách", maxLines = 1)
-                            Text("SL: ${item.quantity ?: 1} × ${format.format(item.bookPrice ?: 0.0)}", color = Color.Gray)
+                            val itemPrice = (item.bookPrice ?: 0.0) * 100000
+                            Text("SL: ${item.quantity ?: 1} × ${format.format(itemPrice)}", color = Color.Gray)
                         }
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Tổng cộng: ${format.format(detail.totalAmount ?: 0.0)}")
+                val rawTotal = (detail.totalAmount ?: 0.0) * 100000
+                Text("Tổng cộng: ${format.format(rawTotal)}")
                 if (detail.voucher != null) Text("Giảm giá: ${detail.voucher.description}", color = Color(0xFF2E7D32))
-                Text("Thanh toán: ${format.format(detail.finalAmount ?: detail.totalAmount ?: 0.0)}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                val rawFinal = (detail.finalAmount ?: detail.totalAmount ?: 0.0) * 100000
+                Text("Thanh toán: ${format.format(rawFinal)}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
             }
 
             if (detail.status == "Chờ thanh toán" || detail.status == "Đang xử lý") {

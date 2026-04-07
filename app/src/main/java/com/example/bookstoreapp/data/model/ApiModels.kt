@@ -38,16 +38,31 @@ data class Book(
     val description: String? = null,
     val language: String? = null,
     val pageCount: Int? = null,
-    val images: List<BookImage>? = null
+    @SerializedName("BookImages") val images: List<BookImage>? = null,
+    val primaryImage: String? = null
 ) {
     val primaryImageUrl: String
-        get() = images?.firstOrNull { it.isPrimary == true }?.imageURL
-            ?: images?.firstOrNull()?.imageURL ?: ""
+        get() {
+            val url = primaryImage 
+                ?: images?.firstOrNull { it.isPrimary == true }?.imageURL
+                ?: images?.firstOrNull()?.imageURL 
+                ?: ""
+            
+            if (url.startsWith("//")) return "https:$url"
+            return if (url.startsWith("/")) com.example.bookstoreapp.data.api.RetrofitClient.BASE_URL + url else url
+        }
 }
 
 data class BookImage(
     @SerializedName("imageURL") val imageURL: String,
     val isPrimary: Boolean? = false
+)
+
+data class AuthorInfo(
+    @SerializedName("authorID") val authorID: Int? = null,
+    @SerializedName("authorName") val fullName: String? = null,
+    @SerializedName("biography") val bio: String? = null,
+    val avatar: String? = null
 )
 
 data class PaginatedBooks(
@@ -59,7 +74,10 @@ data class PaginationInfo(
     val limit: Int,
     val total: Int? = null,
     val totalPages: Int? = null
-)
+) {
+    val computedTotalPages: Int
+        get() = totalPages ?: if (total != null && limit > 0) Math.ceil(total.toDouble() / limit).toInt() else 1
+}
 
 data class BookDetailResponse(
     val book: Book,
@@ -96,11 +114,15 @@ data class CartResponse(
 data class CartItemResponse(
     @SerializedName("cartItemID") val cartItemId: Int,
     val quantity: Int,
-    @SerializedName("idBook") val bookId: Int,
-    val bookTitle: String? = null,
-    val bookPrice: Double? = null,
-    val bookImage: String? = null
-)
+    @SerializedName("idBook") val idBook: Int? = null,
+    @SerializedName("Book") val book: Book? = null
+) {
+    val bookId: Int get() = book?.bookId ?: idBook ?: 0
+    val bookTitle: String get() = book?.title ?: "Sách"
+    val bookPrice: Double get() = book?.price ?: 0.0
+    val bookImage: String? get() = book?.primaryImageUrl
+    val fullImageUrl: String get() = book?.primaryImageUrl ?: ""
+}
 
 data class AddToCartRequest(
     val customerId: Int,
@@ -214,7 +236,12 @@ data class OrderBookItem(
     val bookPrice: Double? = null,
     val quantity: Int? = null,
     val bookImage: String? = null
-)
+) {
+    val fullImageUrl: String
+        get() = if (bookImage?.startsWith("//") == true) "https:$bookImage"
+        else if (bookImage?.startsWith("/") == true) com.example.bookstoreapp.data.api.RetrofitClient.BASE_URL + bookImage 
+        else bookImage ?: ""
+}
 
 data class OrderDetailResponse(
     @SerializedName("orderID") val orderId: Int,
@@ -232,3 +259,10 @@ data class OrderDetailResponse(
 // ===================== CHATBOT =====================
 data class ChatbotRequest(val userMessage: String)
 data class ChatbotResponse(val reply: String? = null, val message: String? = null)
+
+// ===================== AI SEARCH =====================
+data class AISearchResponse(
+    @SerializedName(value = "recognizedText", alternate = ["ai_detected_title"])
+    val recognizedText: String?,
+    val results: List<Book>
+)

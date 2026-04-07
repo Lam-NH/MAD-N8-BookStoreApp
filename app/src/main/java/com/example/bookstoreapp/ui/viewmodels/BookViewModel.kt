@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.bookstoreapp.data.api.RetrofitClient
 import com.example.bookstoreapp.data.model.*
+import android.util.Log
 import kotlinx.coroutines.launch
 
 class BookViewModel : ViewModel() {
@@ -18,10 +19,12 @@ class BookViewModel : ViewModel() {
     var bookDetail by mutableStateOf<BookDetailResponse?>(null)
     var allReviews by mutableStateOf<List<ReviewItem>>(emptyList())
     var searchResults by mutableStateOf<List<Book>>(emptyList())
-    var currentPage by mutableStateOf(1)
-    var totalPages by mutableStateOf(1)
+    var searchAuthorMatches by mutableStateOf<List<AuthorInfo>>(emptyList())
+    var selectedAuthor by mutableStateOf<AuthorInfo?>(null)
     var isLoading by mutableStateOf(false)
     var errorMessage by mutableStateOf<String?>(null)
+    var recognizedText by mutableStateOf<String?>(null)
+    var isSearchActive by mutableStateOf(false)
 
     fun loadCategories() {
         viewModelScope.launch {
@@ -41,15 +44,26 @@ class BookViewModel : ViewModel() {
         }
     }
 
-    fun loadBooksByCategory(categoryId: Int?, page: Int = 1) {
+    fun loadBooksByCategory(categoryId: Int?) {
         viewModelScope.launch {
             isLoading = true
             try {
-                val response = api.getBooks(page = page, categoryId = categoryId)
+                val response = api.getBooks(categoryId = categoryId)
                 if (response.isSuccessful && response.body() != null) {
-                    bookList = response.body()!!.data
-                    currentPage = response.body()!!.pagination?.page ?: page
-                    totalPages = response.body()!!.pagination?.totalPages ?: 1
+                    bookList = response.body()!!
+                }
+            } catch (_: Exception) {}
+            isLoading = false
+        }
+    }
+
+    fun loadBooksByAuthor(authorId: Int) {
+        viewModelScope.launch {
+            isLoading = true
+            try {
+                val response = api.getBooksByAuthor(authorId)
+                if (response.isSuccessful && response.body() != null) {
+                    bookList = response.body()!!
                 }
             } catch (_: Exception) {}
             isLoading = false
@@ -86,17 +100,87 @@ class BookViewModel : ViewModel() {
         }
     }
 
-    fun search(query: String, page: Int = 1) {
+    fun search(query: String) {
         viewModelScope.launch {
             isLoading = true
+            isSearchActive = true
+            recognizedText = null // Reset AI text on normal search
+            searchAuthorMatches = emptyList()
+            searchResults = emptyList()
             try {
-                val response = api.searchBooks(query, page)
+                val response = api.searchBooks(query)
                 if (response.isSuccessful && response.body() != null) {
-                    searchResults = response.body()!!.data
-                    totalPages = response.body()!!.pagination?.totalPages ?: 1
+                    val element = response.body()!!
+                    val gson = com.google.gson.Gson()
+                    if (element.isJsonArray) {
+                        searchResults = gson.fromJson(element, Array<Book>::class.java).toList()
+                    } else if (element.isJsonObject) {
+                        val obj = element.asJsonObject
+                        if (obj.has("authorMatches")) {
+                            searchAuthorMatches = gson.fromJson(obj.get("authorMatches"), Array<AuthorInfo>::class.java).toList()
+                        }
+                        if (obj.has("data")) {
+                            searchResults = gson.fromJson(obj.get("data"), Array<Book>::class.java).toList()
+                        }
+                    }
                 }
             } catch (_: Exception) {}
             isLoading = false
+        }
+    }
+
+    fun searchByVoice(audioPart: okhttp3.MultipartBody.Part, onDone: () -> Unit = {}) {
+        Log.d("BookViewModel", "searchByVoice called with audio part")
+        viewModelScope.launch {
+            isLoading = true
+            isSearchActive = true
+            recognizedText = null
+            searchResults = emptyList()
+            try {
+                val response = api.voiceSearch(audioPart)
+                Log.d("BookViewModel", "searchByVoice response: ${response.code()}")
+                if (response.isSuccessful && response.body() != null) {
+                    val body = response.body()!!
+                    recognizedText = body.recognizedText
+                    searchResults = body.results
+                    Log.d("BookViewModel", "searchByVoice found: ${body.results.size} books")
+                }
+            } catch (e: Exception) {
+                Log.e("BookViewModel", "searchByVoice error", e)
+            }
+            isLoading = false
+            onDone()
+        }
+    }
+
+    fun clearSearch() {
+        searchResults = emptyList()
+        searchAuthorMatches = emptyList()
+        recognizedText = null
+        isSearchActive = false
+    }
+
+    fun searchByImage(imagePart: okhttp3.MultipartBody.Part, onDone: () -> Unit = {}) {
+        Log.d("BookViewModel", "searchByImage called")
+        viewModelScope.launch {
+            isLoading = true
+            isSearchActive = true
+            recognizedText = null
+            searchResults = emptyList()
+            try {
+                val response = api.imageSearch(imagePart)
+                Log.d("BookViewModel", "searchByImage response: ${response.code()}")
+                if (response.isSuccessful && response.body() != null) {
+                    val body = response.body()!!
+                    recognizedText = body.recognizedText
+                    searchResults = body.results
+                    Log.d("BookViewModel", "searchByImage found: ${body.results.size} books")
+                }
+            } catch (e: Exception) {
+                Log.e("BookViewModel", "searchByImage error", e)
+            }
+            isLoading = false
+            onDone()
         }
     }
 }
